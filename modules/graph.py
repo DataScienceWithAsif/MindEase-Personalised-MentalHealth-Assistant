@@ -126,13 +126,29 @@ def emotion_detection(state: GraphState):
 ## related domain finetuned model nodes
 def Fine_Tuned_Model(state: GraphState):
     user_message = state["user_message"]
-    API_URL = "https://a-asif-mindease.hf.space/predict"
-    try:
-        response = requests.post(API_URL, json={"text": str(user_message)}, timeout=15)
-        response = response.json()["response"]
-    except Exception:
-        response = "Please be kind to yourself. You are not alone in this."
-    return {"fine_tuned_model_response": response}
+    API_URL      = "https://a-asif-mindease.hf.space/predict"
+
+    for attempt in range(2):
+        try:
+            r = requests.post(
+                API_URL,
+                json={"text": str(user_message)},
+                timeout=55          # ← safe under HF's 60s hard limit
+            )
+            r.raise_for_status()
+            result = r.json().get("response", "")
+            if result:
+                return {"fine_tuned_model_response": result}
+        except requests.exceptions.Timeout:
+            if attempt == 0:
+                print("[FineTuned] Cold start timeout — retrying...")
+                continue
+            print("[FineTuned] Second timeout — using fallback")
+        except Exception as e:
+            print(f"[FineTuned] Error: {e} — using fallback")
+            break
+
+    return {"fine_tuned_model_response": "Please be kind to yourself. You are not alone in this."}
 
 # quotation_generator node
 llm_with_quotation_generator = gemini_llm.with_structured_output(Quotations)
